@@ -1,3 +1,5 @@
+if(!require(solrad)) { install.packages("solrad")}
+
 #################### Irradiância no topo e na superfície ####################
 # Irradiância (Io): energia interceptada por unidade de área por unidade de tempo.
 # Plotar Io para o topo da atmosfera para um local onde tenha estação do INMET.

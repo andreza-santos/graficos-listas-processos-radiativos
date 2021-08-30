@@ -3,6 +3,7 @@
 # Plotar Io para o topo da atmosfera para um local onde tenha estação do INMET.
 # Plotar no mesmo gráfico a irradiância em superfície medida pelo INMET.
 
+if(!require(solrad)) { install.packages("solrad")}
 library(solrad)
 options(digits = 5)
 

@@ -1,3 +1,4 @@
+if(!require(solrad)) { install.packages("solrad")}
 library(solrad)
 
 DJ <- seq(1:365)
