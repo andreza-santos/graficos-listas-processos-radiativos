@@ -1,0 +1,479 @@
+---
+title: "Trabalho Balanço de Radiação e de Energia"
+author: Andreza
+date: "3/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+# Pacotes
+pacotes <- c(
+  "rio",
+  "tidyverse",
+  "dplyr",
+  "tidyr",
+  "data.table"
+  )
+easypackages::libraries(pacotes)
+```
+
+# Incompleto. Em contrução.
+
+Utilizar dados da torre de fluxos do Laboratório de Micrometeorologia da UFSM localizada em
+Santa Maria.  
+Descrição dos dados em:  
+SM_description_from_324_2013_to_348_2014.txt  
+Dados no arquivo:  
+dados_SM_from_324_2013_to_348_2014.txt  
+Também segue dados do INMET, caso queiram conferir alguma informação:  
+INMET_A803_Santa_Maria_2013_2014.dat
+
+```{r dados}
+a <- "dados_SM_from_324_2013_to_348_2014.txt"
+b <- "SM_description_from_324_2013_to_348_2014-editado.txt"
+c <- "INMET_A803_Santa_Maria_2013_2014.dat"
+
+nome_vars <- scan(
+  b,
+  what = "double",
+  skip = 31,
+)
+
+dados_torre_fluxos <- import(
+  a,
+  format = "csv",
+  skip = 0,
+  header = FALSE,
+  # nrows = # num. de linhas
+  na.strings = "NaN",
+  col.names = nome_vars
+)
+# Intervalo para Maio 
+filtrar_dados_torre_fluxos_maio <- dados_torre_fluxos[7776:9263, ] %>%
+  mutate(
+    .,
+    "iswr" = dados_torre_fluxos$`57-Rg(W/m)-IncomingShortwaveradiation(3m;Kipp&Zonen,CNR4))`[7776:9263] %>%
+      gsub(
+        pattern = "-999.99",
+        replacement = "NaN"
+      ) %>%
+      as.numeric(.),
+    "oswr" = dados_torre_fluxos$`64-SWout(W/m2)-OutgoingShortwaveradiation(3m;Kipp&Zonen,CNR4)`[7776:9263] %>%
+      gsub(
+        pattern = "-999.99",
+        replacement = "NaN"
+      ) %>%
+      as.numeric(.),
+    "lwin" = dados_torre_fluxos$`65-LWin(W/m2)-IncomingLongwaveradiation(3m;Kipp&Zonen,CNR4)`[7776:9263] %>%
+      gsub(
+        pattern = "-999.99",
+        replacement = "NaN"
+      ) %>%
+      as.numeric(.),
+    "lwout" = dados_torre_fluxos$`66-LWout(W/m2)-OutgoingLongwaveradiation(3m;Kipp&Zonen,CNR4)`[7776:9263] %>%
+      gsub(
+        pattern = "-999.99",
+        replacement = "NaN"
+      ) %>%
+      as.numeric(.)
+  ) %>%
+  rename(
+    .,
+    "dia_juliano" = "3-JulianDay"
+  )
+dados_torre_fluxos_maio <- filtrar_dados_torre_fluxos_maio %>%
+  select("1-code",
+         "dia_juliano",
+         "4-Day",
+         "5-Month",
+         "2-year",
+         "6-HH",
+         "7-MM",
+         iswr,
+         oswr,
+         lwin,
+         lwout
+  ) %>%
+  unite(
+    .,
+    col = data, "4-Day", "5-Month", "2-year",
+    sep = "-") %>%
+  unite(
+    .,
+    col = hora, "6-HH", "7-MM",
+    sep = ":"
+  ) %>%
+  mutate(
+    .,
+    rn = iswr + oswr + lwin + lwout,
+    albedo = oswr / iswr
+  )
+
+inmet <- import(
+  c,
+  format = "csv",
+  skip = 0,
+  header = TRUE,
+  # nrows = # num. de linhas
+  na.strings = "NaN",
+  col.names = c("year", "JulianDay", "HH", "temp inst", "temp max", "temp min",
+                "ur inst", "ur max", "ur min", "p orvalho inst", "p orvalho max",
+                "p orvalho min", "pressao int", "pressao max", "pressao min",
+                "vel vento", "dir vento", "rajada", "radiacao", "chuva")
+)
+inmet <- inmet[3889:4632, ] # Intervalo de dados equivalente aos dados da torre
+```
+
+Mês dos dados para Andreza: Maio
+
+*Os dados podem ter valores não físicos, nestes casos podem deletar ou substituídos por NaN.
+Envio também um arquivo que abre os dados no Matlab, com alguns filtros para os dados.
+
+## 1. Parte:
+a) Plote as componentes do balanço radiativo para todo o mês:  
+K↓ – coluna 57  
+K↑ – coluna 64  
+L↓ - coluna 65  
+L↑ - coluna 66  
+Rn (saldo de energia) ou Q* = K↓ + K↑ + L↓ + L↑
+
+```{r plot_a, echo=FALSE}
+dias <- seq(1, 31, 0.02017)
+
+plot(dias,
+     dados_torre_fluxos_maio$iswr,
+     type = "l",
+     col = "blue",
+     # xaxt = "n",
+     ylim = c(0, 2000),
+     ylab = "Fluxo de Energia (W m⁻²)",
+     xlab = "Dias (Maio)",
+     main = "Componentes do balanço radiativo para o mês de Maio"
+     )
+points(dias, dados_torre_fluxos_maio$oswr, type = "l", col = "green")
+points(dias, dados_torre_fluxos_maio$lwin, type = "l", col = "red")
+points(dias, dados_torre_fluxos_maio$lwout, type = "l", col = "orange")
+points(dias, dados_torre_fluxos_maio$rn, type = "l")
+legend("top",
+       c("K↓",
+         "K↑",
+         "L↓",
+         "L↑",
+         "Rn"
+         # "Radiação de  onda curta incidente (K↓)",
+         # "Radiação de onda curta refletida (K↑)",
+         # "Radiação de onda longa emitida pela atmosfera (L↓)",
+         # "Radiação de onda longa emitida pela superfície (L↑)",
+         # "Saldo de energia (Rn)"
+         ),
+       xpd = TRUE,
+       horiz = TRUE,
+       bty = "n",
+       cex = 1,
+       col = c("Blue", "Green", "Red", "Orange", "Black"),
+       # pch = 1,
+       lty = 1,
+       lwd = 1
+       )
+```
+
+b) Escolha um dia de céu claro e um dia chuvoso para uma análise mais aprofundada do ciclo diurno de cada variável.
+
+```{r ciclo_diurno}
+# inmet[217:239,] # Céu claro == 130
+dia_ceu_claro <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "130"
+  )
+
+# inmet[73:95,] # Dia chuvoso == 124
+dia_chuvoso <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "124"
+  )
+```
+
+Plotagem
+```{r plot_b, echo=FALSE}
+hora <- seq(0, 23.5, by = 0.5)
+
+par(xpd = TRUE,
+    mfrow = c(3, 2),
+    oma = c(2, 2, 2, 2)
+)
+plot(hora,
+     dia_ceu_claro$iswr,
+     type = "l",
+     col = 2,
+     xaxt = "n",
+     ylab = "W mm⁻²",
+     ylim = c(0, 1000)
+     # xlab = "Dias (Maio)"
+)
+points(hora, dia_chuvoso$iswr, type = "l", col = "Blue")
+# plot(hora, dia_chuvoso$iswr, type = "l", col = "blue", xaxt = "n", yaxt = "n", ylab = "W m⁻²", ylim = c(0, 700))
+plot(hora, dia_ceu_claro$oswr, type = "l", col = "3", xaxt = "n", ylab = "W mm⁻²", ylim = c(0, 300))
+points(hora, dia_chuvoso$oswr, type = "l", col = "Blue")
+# plot(hora, dia_chuvoso$oswr, type = "l", col = 3, xaxt = "n", yaxt = "n", ylab = "W m⁻²", ylim = c(0, 300))
+plot(hora, dia_ceu_claro$lwin, type = "l", col = "red", xaxt = "n", ylab = "W mm⁻²", ylim = c(300, 450))
+points(hora, dia_chuvoso$lwin, type = "l", col = "Blue")
+# plot(hora, dia_chuvoso$lwin, type = "l", col = "red", xaxt = "n", yaxt = "", ylab = "W mm⁻²", ylim = c(300, 450))
+plot(hora, dia_ceu_claro$lwout, type = "l", col = "orange", xaxt = "n", ylab = "W mm⁻²", ylim = c(360, 460))
+points(hora, dia_chuvoso$lwout, type = "l", col = "Blue")
+# plot(hora, dia_chuvoso$lwout, type = "l", col = "orange", xaxt = "n", yaxt = "n", ylab = "W m⁻²", ylim = c(0, 450))
+plot(hora, dia_ceu_claro$rn, type = "l", xlab = "Hora", ylab = "W mm⁻²", ylim = c(700, 1600))
+points(hora, dia_chuvoso$rn, type = "l", col = "Blue")
+# plot(hora, dia_chuvoso$rn, type = "l", xlab = "Hora", ylab = "W m⁻²", ylim = c(700, 1600))
+
+par(fig = c(0, 1, 0, 1), oma = c(1, 1, 2, 2), mar = c(0, 0, 1, 0), new = TRUE)
+plot(0,
+     0,
+     type = "n",
+     bty = "n",
+     xaxt = "n",
+     yaxt = "n",
+     main = "Ciclo diurno das componentes do balanço radiativo")
+legend("bottomright",
+       c(
+         # "K↓",
+         # "K↑",
+         # "L↓",
+         # "L↑",
+         # "Rn",
+         # "K↓, K↑, L↓, L↑ e Rn para o dia chuvoso"
+         "Radiação de  onda curta incidente (K↓)",
+         "Radiação de onda curta refletida (K↑)",
+         "Radiação de onda longa emitida pela atmosfera (L↓)",
+         "Radiação de onda longa emitida pela superfície (L↑)",
+         "Saldo de energia (Rn)",
+         "K↓, K↑, L↓, L↑ e Rn para o dia chuvoso"
+       ),
+       xpd = FALSE,
+       horiz = FALSE,
+       # bty = "n",
+       cex = 1,
+       col = c("2", 3, "Red", "Orange", "Black", "Blue"),
+       # pch = 1,
+       lty = 1,
+       lwd = 1
+)
+```
+
+c) Calcule o albedo de cada dia
+```{r echo=FALSE}
+# calcule?
+valor_albedo <- dados_torre_fluxos_maio %>%
+  select(
+    .,
+    data,
+    iswr,
+    oswr,
+    albedo)
+
+plot(dias,
+     dados_torre_fluxos_maio$albedo,
+     type = "l",
+     lwd = 2,
+     ylim = c(0, 1),
+     ylab = "Albedo",
+     xlab = "Dias (Maio)",
+     main = "Albedo para todo o mês de Maio"
+     )
+```
+
+d) Apresente o ciclo diário para as componentes do balanço radiativo para o mês.
+```{r echo=FALSE}
+hora2 <- rep(hora, times = 31)
+dia1 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "121"
+    )
+dia2 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "122"
+    )
+dia3 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "123"
+    )
+dia4 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "124"
+    )
+dia5 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "125"
+    )
+dia6 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "126"
+    )
+dia7 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "127"
+    )
+dia8 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "128"
+    )
+dia9 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "129"
+    )
+dia10 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "130"
+    )
+dia11 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "131"
+    )
+dia12 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "132"
+    )
+dia13 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "133"
+    )
+dia14 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "134"
+    )
+dia15 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "135"
+    )
+dia16 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "136"
+    )
+dia17 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "137"
+    )
+dia18 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "138"
+    )
+dia19 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "139"
+    )
+dia20 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "140"
+    )
+dia21 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "141"
+    )
+dia22 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "142"
+    )
+dia23 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "143"
+    )
+dia24 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "144"
+    )
+dia25 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "145"
+    )
+dia26 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "146"
+    )
+dia27 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "147"
+    )
+dia28 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "148"
+    )
+dia29 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "149"
+    )
+dia30 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "150"
+    )
+dia31 <- dados_torre_fluxos_maio %>%
+  filter(
+    dia_juliano == "151"
+    )
+```
+
+Plotagem
+```{r plot_d, echo=FALSE}
+## 8 lin 4 col
+
+plot(hora,
+     dia1$iswr,
+     type = "l",
+     col = 2,
+     # xaxt = "n",
+     ylim = c(0, 2000),
+     ylab = "Fluxo de Energia (W m⁻²)",
+     xlab = "Horas",
+     main = "Componentes do balanço radiativo do mês de Maio"
+     )
+points(hora, dia1$oswr, type = "l", col = 3)
+points(hora, dia1$lwin, type = "l", col = 4)
+points(hora, dia1$lwout, type = "l", col = 6)
+points(hora, dia1$rn, type = "l", col = 1)
+```
+
+e) Relacione as variações diárias com as demais variáveis atmosféricas, tais como Temp, UR,
+etc...
+```{r}
+
+```
+
+f) Descreva os sensores foram utilizados para a medida destas componentes.
+```{r}
+
+```
+
+2. Parte  
+a) Plote as componentes do balanço de energia para todo o mês:  
+H – coluna 30  
+LE – coluna 26Fg - coluna 60  
+Rn - coluna 62 ou = K↓ + K↑ + L↓ + L↑  
+```{r}
+componentes_be <- dados_torre_fluxos_maio
+```
+
+b) Escolha um dia de céu claro e um dia chuvoso para uma análise mais aprofundada do ciclo
+diurno de cada variável.
+```{r}
+
+```
+
+c) Apresente o ciclo diário para as componentes do balanço radiativo para o mês.
+```{r}
+
+```
+
+d) Relacione as variações diárias com as demais variáveis atmosféricas, tais como Temp, UR,
+etc...
+```{r}
+
+```
+
+e) Descreva os sensores foram utilizados para a medida destas componentes.
+```{r}
+
+```
+
